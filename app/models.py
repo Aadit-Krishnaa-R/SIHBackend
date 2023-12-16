@@ -30,6 +30,9 @@ class Employee:
     def get_employee_by_id(employee_id):
         employee_collection = db['employee']
         return employee_collection.find_one({'_id': ObjectId(employee_id)})
+    def get_employee_by_username(username):
+        employee_collection = db['employee']
+        return employee_collection.find_one({'username': username})
 
     def update(self, employee_id):
         employee_collection = db['employee']
@@ -84,8 +87,8 @@ class Call:
         call_collection = db['calls']
         call_collection.delete_one({'_id': ObjectId(call_id)})
 
-    class Admin:
-        def __init__(self,username,password,created_at=None):
+class Admin:
+    def __init__(self,username,password,created_at=None):
             self.username = username
             self.password = password
             self.created_at = created_at or datetime.utcnow()
@@ -104,6 +107,10 @@ class Call:
     def get_admin_by_id(admin_id):
         admin_collection = db['admin']
         return admin_collection.find_one({'_id': ObjectId(admin_id)})
+    
+    def get_admin_by_username(username):
+        admin_collection = db['admin']
+        return admin_collection.find_one({'username': username})
 
     def update(self, admin_id):
         admin_collection = db['admin']
