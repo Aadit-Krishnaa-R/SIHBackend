@@ -22,7 +22,6 @@ class Employee:
             'created_at': self.created_at
         }
 
-    @staticmethod
     def save(self):
         employee_collection = db['employee']
         employee_data = self.to_dict()
@@ -68,7 +67,6 @@ class Call:
             'created_at': self.created_at
         }
     
-    @staticmethod
     def save(self):
         call_collection = db['calls']
         call_data = self.to_dict()
@@ -99,7 +97,6 @@ class Admin:
             'created_at': self.created_at
         }
 
-    @staticmethod
     def save(self):
         admin_collection = db['admin']
         admin_data = self.to_dict()
