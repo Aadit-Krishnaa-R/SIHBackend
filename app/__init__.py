@@ -10,6 +10,7 @@ from app.employee import employee_bp
 
 def create_app():
     app = Flask(__name__)
+    app.secret_key='sdnsjsjfbwfiwf'
 
 
 

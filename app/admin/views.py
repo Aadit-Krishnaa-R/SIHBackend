@@ -1,13 +1,17 @@
 from flask import render_template, request, jsonify, session, redirect, url_for
 from app.admin import admin_bp
-from run import app
+# from run import app
 from flask_pymongo import PyMongo
 from app.models import Admin
 from werkzeug.security import generate_password_hash, check_password_hash
-mongo = PyMongo(app)
+# mongo = PyMongo(app)
 
 #add all admin routes
+ACCESS={
+    'admin':'0',
+    'employee':"1"
 
+}
 
 @admin_bp.route('/')
 def admin_dashboard():
@@ -25,7 +29,7 @@ def adm_signup():
     if not username or not password:
         return jsonify({'error': 'Username and password are required'}), 400
 
-    if mongo.db.admins.find_one({'username': username}):
+    if Admin.get_admin_by_username(username):
         return jsonify({'error': 'Username already taken'}), 400
 
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
@@ -34,6 +38,7 @@ def adm_signup():
     new_admin.save()
 
     return jsonify({'message': 'User registered successfully'}), 201
+
 
 @admin_bp.route('/admin_login', methods=['POST'])
 def adm_login():
@@ -49,6 +54,7 @@ def adm_login():
 
     if admin and check_password_hash(admin['password'], password):
         session['admin'] = {'username': username}
+        session['access_level']=ACCESS['admin']
         return jsonify({'message': 'Login successful'}), 200
     else:
         return jsonify({'error': 'Invalid username or password'}), 401
