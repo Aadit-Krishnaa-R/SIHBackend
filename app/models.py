@@ -27,6 +27,10 @@ class Employee:
         employee_data = self.to_dict()
         employee_collection.insert_one(employee_data)
 
+    def get_all_employees():
+        employee_collection = db['employee']
+        return list(employee_collection.find())
+    
     def get_employee_by_id(employee_id):
         employee_collection = db['employee']
         return employee_collection.find_one({'_id': ObjectId(employee_id)})
@@ -40,7 +44,7 @@ class Employee:
         employee_collection.delete_one({'_id': ObjectId(employee_id)})
 
 class Call:
-    def __init__(self,graph_coords,emotions,pos_percent,neg_percent,rating,language,duration,gender,employeid,created_at=None):
+    def __init__(self,graph_coords,emotions,pos_percent,neg_percent,rating,language,duration,gender,employeUsername,created_at=None):
         self.graph_coords = graph_coords
         self.emotions = emotions
         self.pos_percent =pos_percent
@@ -49,7 +53,7 @@ class Call:
         self.language = language
         self.duration = duration
         self.gender = gender
-        self.employeid = employeid
+        self.employeUsername = employeUsername
 
         self.created_at = created_at or datetime.utcnow()
 
@@ -63,7 +67,7 @@ class Call:
             'language' : self.language,
             'duration' : self.duration,
             'gender' : self.gender,
-            'employeid' : self.employeid,
+            'employeUsername' : self.employeUsername,
             'created_at': self.created_at
         }
     
@@ -75,6 +79,10 @@ class Call:
     def get_call_by_id(call_id):
         call_collection = db['calls']
         return call_collection.find_one({'_id': ObjectId(call_id)})
+    
+    def get_calls_by_employee_id(employee_username):
+        calls_collection = db['calls']
+        return list(calls_collection.find({'employeUsername': employee_username}))
 
     def update(self, call_id):
         call_collection = db['calls']
@@ -112,7 +120,6 @@ class Admin:
     def delete(self, admin_id):
         admin_collection = db['admin']
         admin_collection.delete_one({'_id': ObjectId(admin_id)})
-
 
 def get_db():
     return db
