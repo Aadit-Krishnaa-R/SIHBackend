@@ -1,14 +1,9 @@
 from app import create_app
-
-#dont touch this file too
+from flask_cors import CORS
+from flask import Response, request
 
 if __name__ == '__main__':
     app = create_app()
-
+    CORS(app, resources={r"/*":{"origins":["http://localhost:3000", "http://localhost:5000","http://192.168.179.244:5000","http://192.168.179.35:3000"]}}, supports_credentials=True)
+    app.config['CORS_HEADERS'] = 'Content-Type'
     app.run()
-
-
-
-
-# app = create_app()
-# app.config['MONGO_URI'] = 'mongodb+srv://aaditkrishnaa18:hkALbbvCNLh1gQsg@sih.l0g5uni.mongodb.net/?retryWrites=true&w=majority'
