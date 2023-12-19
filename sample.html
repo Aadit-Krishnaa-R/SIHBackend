@@ -1,0 +1,53 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Upload Test</title>
+  </head>
+  <body>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input id="music_file" name="music_file" type="file" accept=".mp3,.wav" />
+      <input
+        id="username"
+        name="username"
+        type="text"
+        placeholder="Enter username"
+      />
+      <button type="button" onclick="uploadFile()">Upload</button>
+    </form>
+
+    <script>
+      function uploadFile() {
+        var formData = new FormData();
+        const fileInput = document.getElementById("music_file");
+        const file = fileInput.files[0];
+        formData.append("music_file", file, file.name);
+        const usernameInput = document.getElementById("username");
+        const username = usernameInput.value;
+        formData.append("username", username);
+
+        fetch("http://127.0.0.1:5000/admin/audio_upload", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
+            }
+            return response.json();
+          })
+          .then((data) => {
+            console.log(data);
+          })
+          .catch((error) => {
+            console.error(
+              "There was a problem with the fetch operation:",
+              error
+            );
+          });
+      }
+    </script>
+  </body>
+</html>
