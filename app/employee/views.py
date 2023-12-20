@@ -75,7 +75,8 @@ def emp_login():
     
     if employee and check_password_hash(employee['password'], password):
         session['employee'] = {'username': username}
-        session['admin'] = {'username': adminUsername}
+        session['admin_name'] = {'username': adminUsername}
+
 
         session['access_level']=ACCESS['employee']
         return jsonify({'message': 'Login successful'}), 200
@@ -87,10 +88,12 @@ def emp_logout():
     session.pop('employee', None)
     return jsonify({'message': 'Logout successful'}), 200
 
-def check_employee_login():
-    excluded_routes = [ 'emp_login', 'emp_signup']  # Add any other routes you want to exclude
-    if request.endpoint and 'employee' not in session and request.endpoint not in excluded_routes:
-        return jsonify({'message': 'Not logged in'}), 401
+# @employee_bp.before_request
+# def check_employee_login():
+#     print("asksdfaisf")
+#     excluded_routes = ['emp_login', 'emp_signup']
+#     if request.endpoint and 'employee' not in session and request.endpoint not in excluded_routes:
+#         return jsonify({'message': 'Not logged in'}), 401
 
 @employee_bp.route('/profile')
 def emp_profile():
@@ -98,11 +101,41 @@ def emp_profile():
         return jsonify({'message': 'Not logged in'}), 401
 
     user_info = session['employee']
-    admin_info=session['admin']
+    admin_info=session['admin_name']
     return jsonify({'username': user_info['username'],
                     'admin':admin_info['username']
                     }), 200
 
+@employee_bp.route('/call_details/<id>', methods=['GET'])
+def get_calldet(id):
+    call_id = id
+    print(call_id)
+
+    if not call_id:
+        return jsonify({'error': 'Call ID parameter is required'}), 400
+
+    call = Call.get_call_by_id(call_id)
+
+    if not call:
+        return jsonify({'message': 'Call not found'}), 404
+
+    emp_name = call['employeename']
+    emp_rating = Call.get_average_rating_by_employee_name(emp_name)
+
+    return jsonify({
+        'call_id': call_id,
+        'duration': round(float(call['duration']),2),
+        'employee_name': emp_name,
+        'emp_rating': emp_rating,
+        'graph_coords':call['graph_coords'],
+        'rating':call['rating'],
+        'emotions' : call['emotions'],
+        'pos_percentage' : call['pos_percent'],
+        'neg_percentage' : call['neg_percent'],
+        'transcript' : call['transcript'],
+        'issues' : call['issue_list'],
+        'emotions_audio': call['emotions_audio']
+    })
 
 @employee_bp.route('/employee_calls', methods=['GET'])
 def get_employee_calls():
@@ -122,15 +155,21 @@ def get_employee_calls():
     start_date = datetime.combine(today_date, datetime.min.time())
     end_date = start_date + timedelta(days=1)
     
-    employee_calls_count = Call.get_no_of_calls_by_employee_name(employee_username, start_date, end_date)
+    employee_calls_count_today = Call.get_no_of_calls_by_employee_name(employee_username, start_date, end_date)
     employee_calls = Call.get_calls_by_employee_name(employee_username, start_date, end_date)
+    employee_calls_count=Call.get_calls_of_calls(employee_username)
+    employee_calls_all=Call.get_calls_all(employee_username)
     serialized_employee_calls = [
         {**call, '_id': str(call['_id'])} for call in employee_calls
     ]
+    serialized_employee_calls2 = [
+        {**call, '_id': str(call['_id'])} for call in employee_calls_all
+    ]
 
     return jsonify({
-        'employee_calls_count': employee_calls_count,
-        'employee_calls': serialized_employee_calls
+        'employee_calls_count': employee_calls_count_today,
+        'employee_calls': serialized_employee_calls2,
+        'employee_total_call_count':employee_calls_count
     })
 
 
@@ -167,13 +206,18 @@ def get_response_graph():
 
     if not employee:
         return jsonify({'message': 'Employee not found'}), 404
-
-    pos_percent = Call.get_positive_percent(employee_username)
-    neg_percent = Call.get_neg_percent(employee_username)
-    neutral_percent = 100 - pos_percent - neg_percent
+    
+    if (Call.get_calls_of_calls(employee_username) == 0):
+        pos_percent = 0
+        neg_percent = 0
+        neutral_percent = 0
+    else:
+        pos_percent = Call.get_positive_percent(employee_username)
+        neg_percent = Call.get_neg_percent(employee_username)
+        neutral_percent = 100 - pos_percent - neg_percent
 
     return jsonify({
-        'positive_percent': pos_percent,
-        'negative_percent': neg_percent,
-        'neutral_percent': neutral_percent
+        'positive_percent': round(pos_percent,2),
+        'negative_percent': round(neg_percent,2),
+        'neutral_percent': round(neutral_percent,2)
     })
