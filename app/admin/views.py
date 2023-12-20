@@ -6,8 +6,16 @@ from app.config import MONGO_URI, DB_NAME
 from flask_pymongo import PyMongo
 from app.models import Admin, Employee, Call
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from pymongo import MongoClient
+import base64
+from flask import current_app
+import asyncio
+import binascii
+import wave
+import io
+
+
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 dirname = os.path.dirname(__file__)
@@ -35,7 +43,7 @@ def adm_signup():
         return jsonify({'message': 'Username already taken'}), 400
 
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-    new_admin = Admin(username=username, password=hashed_password)
+    new_admin = Admin(username=username, password=hashed_password,organisation=organisation)
 
     new_admin.save()
 
@@ -56,10 +64,16 @@ def adm_login():
 
     if admin and check_password_hash(admin['password'], password):
         session['access_level']=ACCESS['admin']
+        session['admin'] = {'username': username} 
         return jsonify({'message': 'Login successful'}), 200
     else:
         return jsonify({'error': 'Invalid username or password'}), 401
-    
+
+# @admin_bp.before_request
+# def check_admin_login():
+#     excluded_routes = ['adm_signup', 'adm_login']
+#     if request.endpoint and 'admin' not in session and request.endpoint not in excluded_routes:
+#         return jsonify({'message': 'Not logged in'}), 401
 
 @admin_bp.route('/admin_logout', methods=['GET'])
 def adm_logout():
@@ -81,12 +95,20 @@ def add_emp():
     user_info=session['admin']
     admin_username = user_info['username']
     admin = Admin.get_admin_by_username(admin_username)
+    admin_id = Admin.get_admin_id_by_username(admin_username)
+
 
     if admin:
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
         # Create an Employee object with the admin_id
+
+
+        employee_usernames = Admin.get_employee_usernames(admin_id)
+        if(username in employee_usernames):
+            return jsonify({"message":"Employee already exists"})
+
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
 
@@ -99,57 +121,36 @@ def add_emp():
     else:
         return jsonify({"error": "Admin not found"}), 404
 
+@admin_bp.route('/employee_det', methods=['GET'])
+def get_employee_dets():
+    emp_id = request.args.get('id')
+    if not emp_id:
+        return jsonify({'error': 'Employee ID parameter is required'}), 400
 
+    emp = Employee.get_employee_by_id(emp_id)
+    employee_username = Employee.get_username_by_id(emp_id)
 
-@admin_bp.route('/add_call',methods=['POST'])
-def add_call():
-    user_info = session.get('admin')
-    if user_info:
-        admin_username = user_info['username']
-        admin = Admin.get_admin_by_username(admin_username)
+    if not emp:
+        return jsonify({'message': 'Employee doesn\'t exist'}), 404
 
-        if admin:
-            data = request.get_json()
+    pos_percent = Call.get_positive_percent(employee_username)
+    neg_percent = Call.get_neg_percent(employee_username)
+    total_calls = Call.get_calls_of_calls(employee_username)
+    rating = Call.get_average_rating_by_employee_name(employee_username)
 
-            graph_coords = data.get('graph_coords')
-            emotions = data.get('emotions')
-            pos_percent = data.get('pos_percent')
-            neg_percent = data.get('neg_percent')
-            rating = data.get('rating')
-            language = data.get('language')
-            duration = data.get('duration')
-            gender = data.get('gender')
-            employee_name = data.get('employee_name')
-
-            employee = Employee.get_employee_by_username(employee_name)
-
-            if employee:
-                # Create a Call object
-                new_call = Call(
-                    graph_coords=graph_coords,
-                    emotions=emotions,
-                    pos_percent=pos_percent,
-                    neg_percent=neg_percent,
-                    rating=rating,
-                    language=language,
-                    duration=duration,
-                    gender=gender,
-                    employeename=employee_name  # Use employee name instead of ID
-                )
-                new_call.save()
-
-                return jsonify({"message": f"Call added successfully for employee {employee_name}"}), 201
-            else:
-                return jsonify({"error": "Employee not found"}), 404
-        else:
-            return jsonify({"error": "Admin not found"}), 404
-    else:
-        return jsonify({"error": "User not authenticated"}), 401
-
+    return jsonify({
+        'emp_name': emp['username'],
+        'emp_rating': round(rating,2),
+        'emp_pos_percent': round(pos_percent, 2),
+        'emp_neg_percent': round(neg_percent, 2),
+        'total_calls': total_calls
+    })
 
 
 @admin_bp.route('/dashboard',methods=['GET'])
 def top_employees_route():
+    if 'admin' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
     user_info = session.get('admin')
     if user_info:
         admin_username = user_info['username']
@@ -171,7 +172,7 @@ def top_employees_route():
             if calls:
                 # Calculate the average rating
                 average_rating = round(sum(float(call['rating']) for call in calls) / len(calls),2)
-                positive_rating = round(sum(float(call['pos_percent'].rstrip('%')) for call in calls)/len(calls),2)
+                positive_rating = round(sum(float(str(call['pos_percent']).replace('%', '')) for call in calls) / len(calls), 2)
                 num_calls = len(calls)
                 employee_ratings.append({'employee_name': employee_name, 'average_rating': average_rating, 'positive_rating': positive_rating, 'num_calls':num_calls})
             else:
@@ -209,14 +210,11 @@ def top_employees_route():
 
         for employee_name in employee_usernames:
             calls = Call.get_calls_by_employee_name1(employee_name)
-
             for call in calls:
-                total_positive_percent += float(call['pos_percent'].rstrip('%'))
-                total_negative_percent += float(call['neg_percent'].rstrip('%'))
-                total_neutral_percent += 100 - (float(call['pos_percent'].rstrip('%')) + float(call['neg_percent'].rstrip('%')))
+                total_positive_percent += float(str(call['pos_percent']).replace('%', ''))
+                total_negative_percent += float(str(call['neg_percent']).replace('%', ''))
+                total_neutral_percent += 100 - (float(str(call['pos_percent']).replace('%', '')) + float(str(call['neg_percent']).replace('%', '')))
                 total_calls += 1
-
-
                 call_date = call['created_at']
                 if call_date >= today_start:
                     calls_today += 1
@@ -272,6 +270,7 @@ def employees():
 
         for employee_name in employee_usernames:
             calls = Call.get_calls_by_employee_name1(employee_name)
+            emp_id=Employee.get_employee_id_by_username(employee_name)
 
             # Calculate the average rating for the employee
             total_rating = 0
@@ -282,18 +281,21 @@ def employees():
                 num_calls += 1
 
             average_rating = total_rating / num_calls if num_calls > 0 else 0
+            average_rating = average_rating
 
             # Add employee and rating to the list
             employee_ratings.append({
                 'employee_name': employee_name,
                 'average_rating': average_rating,
-                'num_calls':num_calls
+                'num_calls':num_calls,
+                'employee_id':emp_id
             })
 
         # Prepare the response
         response_data = {
             'admin_id': admin_id,
             'employee_ratings': employee_ratings
+            
         }
 
         return jsonify(response_data), 200
@@ -301,42 +303,37 @@ def employees():
         return jsonify({"error": "Admin not found"}), 404
 
 
-
-
-@admin_bp.route('/callhistory',methods=['GET'])
+@admin_bp.route('/callhistory', methods=['GET'])
 def callhistory():
     user_info = session.get('admin')
     if user_info:
         admin_username = user_info['username']
         admin = Admin.get_admin_by_username(admin_username)
         admin_id = Admin.get_admin_id_by_username(admin_username)
+    
     if admin:
-        # Retrieve the usernames of all employees associated with the admin
         employee_usernames = Admin.get_employee_usernames(admin_id)
-
-        # Initialize a list to store call history
-        call_history = []
+        all_calls = []
+        total_call_count = 0
+        total_call_count_by_employee = {}
 
         for employee_name in employee_usernames:
             calls = Call.get_calls_by_employee_name1(employee_name)
+            call_count = len(calls)
+            
+            calls = [{'_id': str(call['_id']), 'duration': call['duration'],'graph_coords':call['graph_coords'],'rating':call['rating'],'pos_percent':call['pos_percent'],'neg_percent':call['neg_percent'],'employeename':call['employeename']} for call in calls]
+            all_calls.extend(calls)
 
-            for call in calls:
-                # Add call details to the list
-                call_history.append({
-                    'employee_name': employee_name,
-                    'call_id': str(call['_id']),
-                    'call_rating': call['rating']
-                })
-
-        # Prepare the response
+            total_call_count_by_employee[employee_name] = call_count
+            total_call_count += call_count
         response_data = {
-            'admin_id': admin_id,
-            'call_history': call_history
+            'all_calls': all_calls,
+            'total_call_count': total_call_count,
+            'total_call_count_by_employee': total_call_count_by_employee
         }
+        return jsonify(response_data)
 
-        return jsonify(response_data), 200
-    else:
-        return jsonify({"error": "Admin not found"}), 404
+    return jsonify({'error': 'Admin not found'}), 404
 
 
 @admin_bp.route('/audio_upload', methods=['POST'])
@@ -345,14 +342,108 @@ def predict():
         try:
             save_path = os.path.join(dirname, "mlaudio.wav")
             request.files['music_file'].save(save_path)
-            print("main1")
             result = main(save_path)
-            print("main2")
             username = request.form.get('username')
             result['employeename'] = username
+            result['created_at']=datetime.utcnow()
             call_collection = db['calls']
+            print(">>>>>>>",result)
             call_collection.insert_one(result)
-            print(result)
-            return jsonify(result),201
+            return jsonify({"message": "Audio Upload Successful"}), 201
         except Exception as e:
+            print(">>>>>>",str(e))
             return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/input/voice', methods=['POST'])
+def voice_input():
+    try:
+        voice_request = request.get_json()
+        audio_file = voice_request.get("base64")
+        audio_file=audio_file[22:]
+        padding = len(audio_file) % 4
+        if padding > 0:
+            audio_file += '=' * (4 - padding)
+        decode_string = base64.b64decode(audio_file)
+        audio_path = os.path.join(dirname, "audiofrombase64.wav")
+        pcm_wav_data = convert_blob_to_pcm_wav(decode_string)
+        with open(audio_path, "wb") as wav_file:
+             wav_file.write(pcm_wav_data)
+        return jsonify({"message": "Audio Converted"}), 201
+
+    except binascii.Error as e:
+        return jsonify({"error": "Incorrect padding in base64 string", "details": str(e)}), 400
+
+    except Exception as e:
+        print(str(e))
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/input/voice_upload', methods=['POST'])
+def voice_upload():
+    try:
+        audio_path = os.path.join(dirname, "audiofrombase64.wav")
+        result = main(audio_path)
+        result['employeename'] = "test"
+        result['created_at']=datetime.utcnow()
+        call_collection = db['calls']
+        new_call=call_collection.insert_one(result)
+        call_id=str(new_call.inserted_id)
+
+        return jsonify({"message": "Audio Upload Successful","call_id": call_id }), 201
+    except Exception as e:
+        print(str(e))
+        return jsonify({"error": str(e)}), 500
+    
+        
+
+@admin_bp.route('/issues/<days1>', methods=['GET'])
+def last_seven_issues(days1):
+    user_info = session.get('admin')
+    if user_info:
+        admin_username = user_info['username']
+        admin = Admin.get_admin_by_username(admin_username)
+        admin_id = Admin.get_admin_id_by_username(admin_username)
+    
+    if admin:
+        # Retrieve the usernames of all employees associated with the admin
+        current_date = datetime.utcnow()
+        seven_days_ago = current_date - timedelta(days=int(days1))
+        # employee_ids = Admin.get_employee_ids(admin)
+        employee_usernames = Admin.get_employee_usernames(admin_id)
+        issue_frequency = {}
+        # Iterate through each employee's calls and update the issue frequency
+        for employee_id in employee_usernames:
+            employee_calls_last_7_days = Call.get_calls_by_employee_name(
+                employeename=employee_id, start_date=seven_days_ago, end_date=current_date
+            )
+            for call in employee_calls_last_7_days:
+                issues = call['issue_list']
+
+                for issue in issues:
+                    if issue in issue_frequency:
+                        issue_frequency[issue] += 1
+                    else:
+                        issue_frequency[issue] = 1
+        # Convert the issue frequency dictionary to a list of dictionaries for JSON response
+        result_list = [{'label': issue, 'value': frequency} for issue, frequency in issue_frequency.items()]
+        return jsonify({'issues_frequency': result_list})
+
+
+
+
+def convert_blob_to_pcm_wav(blob):
+    with wave.open(io.BytesIO(blob), 'rb') as wave_file:
+        # Confirm that the encoding is PCM
+        if wave_file.getsampwidth() != 2 or wave_file.getcomptype() != 'NONE':
+            # If it's not PCM, convert the encoding to PCM
+            pcm_data = wave_file.readframes(wave_file.getnframes())
+            pcm_wave = wave.open(io.BytesIO(), 'wb')
+            pcm_wave.setnchannels(wave_file.getnchannels())
+            pcm_wave.setsampwidth(2)  # 16-bit PCM
+            pcm_wave.setframerate(wave_file.getframerate())
+            pcm_wave.setnframes(wave_file.getnframes())
+            pcm_wave.setcomptype('NONE', 'not compressed')
+            pcm_wave.writeframes(pcm_data)
+            pcm_wave.seek(0)
+            return pcm_wave.readframes(pcm_wave.getnframes())
+        # If it's already PCM, return the original data
+        return blob
