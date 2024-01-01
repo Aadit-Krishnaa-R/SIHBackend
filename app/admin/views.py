@@ -13,6 +13,8 @@ from flask import current_app
 import asyncio
 import binascii
 import wave
+import pandas as pd
+from io import BytesIO, StringIO
 import io
 
 
@@ -343,13 +345,16 @@ def predict():
             save_path = os.path.join(dirname, "mlaudio.wav")
             request.files['music_file'].save(save_path)
             result = main(save_path)
-            username = request.form.get('username')
-            result['employeename'] = username
-            result['created_at']=datetime.utcnow()
-            call_collection = db['calls']
-            print(">>>>>>>",result)
-            call_collection.insert_one(result)
-            return jsonify({"message": "Audio Upload Successful"}), 201
+            if result=="spam":
+                return jsonify({"message": "spam"}), 201
+            else:
+                username = request.form.get('username')
+                result['employeename'] = username
+                result['created_at']=datetime.utcnow()
+                call_collection = db['calls']
+                print(">>>>>>>",result)
+                call_collection.insert_one(result)
+                return jsonify({"message": "Audio Upload Successful"}), 201
         except Exception as e:
             print(">>>>>>",str(e))
             return jsonify({"error": str(e)}), 500
@@ -382,13 +387,16 @@ def voice_upload():
     try:
         audio_path = os.path.join(dirname, "audiofrombase64.wav")
         result = main(audio_path)
-        result['employeename'] = "test"
-        result['created_at']=datetime.utcnow()
-        call_collection = db['calls']
-        new_call=call_collection.insert_one(result)
-        call_id=str(new_call.inserted_id)
+        if result=="spam":
+            return jsonify({"message": "spam"}), 201
+        else:        
+            result['employeename'] = "test"
+            result['created_at']=datetime.utcnow()
+            call_collection = db['calls']
+            new_call=call_collection.insert_one(result)
+            call_id=str(new_call.inserted_id)
 
-        return jsonify({"message": "Audio Upload Successful","call_id": call_id }), 201
+            return jsonify({"message": "Audio Upload Successful","call_id": call_id }), 201
     except Exception as e:
         print(str(e))
         return jsonify({"error": str(e)}), 500
@@ -447,3 +455,26 @@ def convert_blob_to_pcm_wav(blob):
             return pcm_wave.readframes(pcm_wave.getnframes())
         # If it's already PCM, return the original data
         return blob
+    
+# @admin_bp.route('/bulkupload', methods=['POST'])
+# def bulk_upload():
+#     # if 'files' not in request.files:
+#     #     return jsonify({'error': 'No files provided'}), 400
+
+#     files = request.files.getlist('files')
+
+#     uploaded_files = []
+
+#     for file in files:
+#         if file and allowed_file(file.filename):
+#             filename = secure_filename(file.filename)
+#             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+#             file.save(file_path)
+#             uploaded_files.append(file_path)
+
+#     return jsonify({'message': 'Files uploaded successfully', 'files': uploaded_files}
+
+
+    # except Exception as e:
+    #     print(f'Error during conversion: {e}')
+    #     return jsonify({'error': 'Conversion failed'}), 500
