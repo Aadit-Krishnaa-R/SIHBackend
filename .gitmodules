@@ -1,0 +1,3 @@
+[submodule "sentimentAnalysis"]
+	path = sentimentAnalysis
+	url = https://github.com/codx-aks/sentimentAnalysis.git

@@ -1,6 +1,6 @@
 from app.admin import admin_bp
 from flask import render_template, request, jsonify, session, redirect, url_for
-from ..sentimentAnalysis.myModel import main
+# from ..sentimentAnalysis.myModel import main
 import os
 from app.config import MONGO_URI, DB_NAME
 from flask_pymongo import PyMongo
@@ -71,11 +71,6 @@ def adm_login():
     else:
         return jsonify({'error': 'Invalid username or password'}), 401
 
-# @admin_bp.before_request
-# def check_admin_login():
-#     excluded_routes = ['adm_signup', 'adm_login']
-#     if request.endpoint and 'admin' not in session and request.endpoint not in excluded_routes:
-#         return jsonify({'message': 'Not logged in'}), 401
 
 @admin_bp.route('/admin_logout', methods=['GET'])
 def adm_logout():
@@ -104,8 +99,6 @@ def add_emp():
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
-        # Create an Employee object with the admin_id
-
 
         employee_usernames = Admin.get_employee_usernames(admin_id)
         if(username in employee_usernames):
@@ -116,7 +109,6 @@ def add_emp():
 
         new_employee = Employee(username=username, password=hashed_password, adminid=str(admin['_id']))
 
-        # Save the Employee object to the 'employee' collection
         new_employee.save()
 
         return jsonify({"message": "Employee added successfully"}), 201
@@ -159,27 +151,17 @@ def top_employees_route():
         admin = Admin.get_admin_by_username(admin_username)
         admin_id = Admin.get_admin_id_by_username(admin_username)
 
-
-    # db = get_db()
-    # admin = Admin.get_admin_by_id(admin_id)
-
     if admin:
-        # Retrieve the usernames of all employees associated with the admin
         employee_usernames = Admin.get_employee_usernames(admin_id)
-
-        # Calculate the average rating for each employee
         employee_ratings = []
         for employee_name in employee_usernames:
             calls = Call.get_calls_by_employee_name1(employee_name)
             if calls:
-                # Calculate the average rating
                 average_rating = round(sum(float(call['rating']) for call in calls) / len(calls),2)
                 positive_rating = round(sum(float(str(call['pos_percent']).replace('%', '')) for call in calls) / len(calls), 2)
                 num_calls = len(calls)
                 employee_ratings.append({'employee_name': employee_name, 'average_rating': average_rating, 'positive_rating': positive_rating, 'num_calls':num_calls})
             else:
-                # If there are no calls, set the average rating to 0
-                # employee_ratings.append({'employee_name': employee_name, 'average_rating': 0})
                  employee_ratings.append({
                     'employee_name': employee_name,
                     'average_rating': 0,
@@ -188,23 +170,17 @@ def top_employees_route():
                 })
                 
 
-        # Sort employees by average rating in descending order
         sorted_employees = sorted(employee_ratings, key=lambda x: x['average_rating'], reverse=True)
 
-        # Take the top 3 employees
         top_3_employees = sorted_employees[:3]
 
         employee_usernames = Admin.get_employee_usernames(admin_id)
 
-        # Initialize variables to store cumulative percentages
         total_positive_percent = 0
         total_negative_percent = 0
         total_neutral_percent = 0
 
-        # Count the number of calls for calculating averages
         total_calls = 0
-
-        #counting the number of calls today
 
         calls_today = 0
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -223,7 +199,6 @@ def top_employees_route():
 
         
         num_employees = len(employee_usernames)
-        # Calculate average percentages
         if total_calls > 0:
             average_positive_percent = round(total_positive_percent / total_calls,2)
             average_negative_percent = round(total_negative_percent / total_calls,2)
@@ -233,7 +208,6 @@ def top_employees_route():
             average_negative_percent = 0
             average_neutral_percent = 0
 
-        # Prepare the response
         response_data2 = {
             'admin_id': admin_id,
             'average_positive_percent': average_positive_percent,
@@ -242,7 +216,6 @@ def top_employees_route():
             'num_calls_today': calls_today,
             'num_employees': num_employees
         }
-        # Prepare the response
         response_data = [{
             'employee_name': entry['employee_name'],
             'average_rating': entry['average_rating'],
@@ -264,17 +237,14 @@ def employees():
         admin = Admin.get_admin_by_username(admin_username)
         admin_id = Admin.get_admin_id_by_username(admin_username)
     if admin:
-        # Retrieve the usernames of all employees associated with the admin
         employee_usernames = Admin.get_employee_usernames(admin_id)
 
-        # Initialize a list to store employee ratings
         employee_ratings = []
 
         for employee_name in employee_usernames:
             calls = Call.get_calls_by_employee_name1(employee_name)
             emp_id=Employee.get_employee_id_by_username(employee_name)
 
-            # Calculate the average rating for the employee
             total_rating = 0
             num_calls = 0
 
@@ -285,7 +255,6 @@ def employees():
             average_rating = total_rating / num_calls if num_calls > 0 else 0
             average_rating = average_rating
 
-            # Add employee and rating to the list
             employee_ratings.append({
                 'employee_name': employee_name,
                 'average_rating': average_rating,
@@ -293,7 +262,6 @@ def employees():
                 'employee_id':emp_id
             })
 
-        # Prepare the response
         response_data = {
             'admin_id': admin_id,
             'employee_ratings': employee_ratings
@@ -412,13 +380,10 @@ def last_seven_issues(days1):
         admin_id = Admin.get_admin_id_by_username(admin_username)
     
     if admin:
-        # Retrieve the usernames of all employees associated with the admin
         current_date = datetime.utcnow()
         seven_days_ago = current_date - timedelta(days=int(days1))
-        # employee_ids = Admin.get_employee_ids(admin)
         employee_usernames = Admin.get_employee_usernames(admin_id)
         issue_frequency = {}
-        # Iterate through each employee's calls and update the issue frequency
         for employee_id in employee_usernames:
             employee_calls_last_7_days = Call.get_calls_by_employee_name(
                 employeename=employee_id, start_date=seven_days_ago, end_date=current_date
@@ -431,7 +396,6 @@ def last_seven_issues(days1):
                         issue_frequency[issue] += 1
                     else:
                         issue_frequency[issue] = 1
-        # Convert the issue frequency dictionary to a list of dictionaries for JSON response
         result_list = [{'label': issue, 'value': frequency} for issue, frequency in issue_frequency.items()]
         return jsonify({'issues_frequency': result_list})
 
@@ -440,20 +404,17 @@ def last_seven_issues(days1):
 
 def convert_blob_to_pcm_wav(blob):
     with wave.open(io.BytesIO(blob), 'rb') as wave_file:
-        # Confirm that the encoding is PCM
         if wave_file.getsampwidth() != 2 or wave_file.getcomptype() != 'NONE':
-            # If it's not PCM, convert the encoding to PCM
             pcm_data = wave_file.readframes(wave_file.getnframes())
             pcm_wave = wave.open(io.BytesIO(), 'wb')
             pcm_wave.setnchannels(wave_file.getnchannels())
-            pcm_wave.setsampwidth(2)  # 16-bit PCM
+            pcm_wave.setsampwidth(2)  
             pcm_wave.setframerate(wave_file.getframerate())
             pcm_wave.setnframes(wave_file.getnframes())
             pcm_wave.setcomptype('NONE', 'not compressed')
             pcm_wave.writeframes(pcm_data)
             pcm_wave.seek(0)
             return pcm_wave.readframes(pcm_wave.getnframes())
-        # If it's already PCM, return the original data
         return blob
     
 # @admin_bp.route('/bulkupload', methods=['POST'])
