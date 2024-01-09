@@ -1,6 +1,6 @@
 from app.admin import admin_bp
 from flask import render_template, request, jsonify, session, redirect, url_for
-# from ..sentimentAnalysis.myModel import main
+from ...sentimentAnalysis.dHexagonSentimentAnalysis import dHexagonAnalysis
 import os
 from app.config import MONGO_URI, DB_NAME
 from flask_pymongo import PyMongo
@@ -312,7 +312,7 @@ def predict():
         try:
             save_path = os.path.join(dirname, "mlaudio.wav")
             request.files['music_file'].save(save_path)
-            result = main(save_path)
+            result = dHexagonAnalysis(save_path)
             if result=="spam":
                 return jsonify({"message": "spam"}), 201
             else:
@@ -354,7 +354,7 @@ def voice_input():
 def voice_upload():
     try:
         audio_path = os.path.join(dirname, "audiofrombase64.wav")
-        result = main(audio_path)
+        result = dHexagonAnalysis(audio_path)
         if result=="spam":
             return jsonify({"message": "spam"}), 201
         else:        
